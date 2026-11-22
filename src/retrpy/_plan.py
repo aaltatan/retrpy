@@ -45,7 +45,9 @@ class Plan[T]:
     ) -> T:
         """Run the attempts in order and return the first success.
 
-        Exceptions outside ``catch`` propagate at once, unwrapped. Within a segment the wait
+        Exceptions outside ``catch`` propagate at once, unwrapped; ``catch`` only takes
+        ``Exception`` subclasses, so ``KeyboardInterrupt`` and cancellation always get through.
+        Within a segment the wait
         before the next try is ``delay * backoff**k``, with ``k`` restarting at each segment,
         so a backup source never inherits the primary's grown delay. Switching segments does
         not wait. ``jitter`` maps each wait to a new one (it owns its RNG, so tests can pass a
