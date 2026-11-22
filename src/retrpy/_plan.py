@@ -1,5 +1,6 @@
 """Plans of attempts: retry is repetition, fallback is concatenation."""
 
+import math
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
@@ -60,6 +61,11 @@ class Plan[T]:
         if not self.segments:
             msg = "Cannot run an empty plan"
             raise ValueError(msg)
+
+        # The annotation can't stop untyped callers; catching BaseException would swallow Ctrl-C.
+        if not all(issubclass(kind, Exception) for kind in catch):
+            msg = f"catch only takes Exception subclasses, never BaseException; got {catch!r}"
+            raise TypeError(msg)
 
         errors: list[Exception] = []
 
@@ -127,7 +133,12 @@ def _wait(
     jitter: Callable[[float], float] | None,
     max_delay: float | None,
 ) -> float:
-    wait = delay * backoff**k
+    try:
+        wait = delay * backoff**k
+
+    except OverflowError:
+        # Long retry budgets outgrow floats; max_delay still caps the infinite wait.
+        wait = math.inf
 
     if jitter is not None:
         wait = jitter(wait)

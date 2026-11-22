@@ -76,3 +76,19 @@ class TestOnFailure:
             (attempt(fn) * 2)(on_failure=hook, sleep=sleep)
 
         assert fn.calls == 1
+
+
+class TestReviewFixes:
+    def test_long_capped_backoff_does_not_overflow(self, sleep: FakeSleep) -> None:
+        plan = attempt(Scripted(NetworkError())) * 1100 + attempt(lambda: 1)
+
+        assert plan(delay=0.01, backoff=2.0, max_delay=1, sleep=sleep) == 1
+        assert sleep.calls[-1] == 1
+
+    def test_catch_rejects_base_exception(self, sleep: FakeSleep) -> None:
+        fn = Scripted(1)
+
+        with pytest.raises(TypeError, match="BaseException"):
+            attempt(fn)(catch=(BaseException,), sleep=sleep)  # type: ignore[arg-type]
+
+        assert fn.calls == 0
