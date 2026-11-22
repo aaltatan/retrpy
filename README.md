@@ -95,6 +95,10 @@ What you get:
 ## Install
 
 ```bash
+uv add retrpy
+```
+
+```bash
 pip install retrpy
 ```
 
