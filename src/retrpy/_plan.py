@@ -38,6 +38,9 @@ class Plan[T]:
         delay: float = 0.0,
         backoff: float = 1.0,
         catch: tuple[type[Exception], ...] = (Exception,),
+        max_delay: float | None = None,
+        jitter: Callable[[float], float] | None = None,
+        on_failure: Callable[[Exception, int], None] | None = None,
         sleep: Callable[[float], object] = time.sleep,
     ) -> T:
         """Run the attempts in order and return the first success.
@@ -45,8 +48,11 @@ class Plan[T]:
         Exceptions outside ``catch`` propagate at once, unwrapped. Within a segment the wait
         before the next try is ``delay * backoff**k``, with ``k`` restarting at each segment,
         so a backup source never inherits the primary's grown delay. Switching segments does
-        not wait. When every attempt fails, an ``ExceptionGroup`` holds all the failures in
-        order, so callers can use ``except*``.
+        not wait. ``jitter`` maps each wait to a new one (it owns its RNG, so tests can pass a
+        deterministic one), and ``max_delay`` then caps it; a wait of zero or less skips
+        ``sleep``. ``on_failure(error, number)`` sees every caught failure, numbered from 1
+        across the whole plan, including the last. When every attempt fails, an
+        ``ExceptionGroup`` holds all the failures in order, so callers can use ``except*``.
         """
 
         if not self.segments:
@@ -63,7 +69,13 @@ class Plan[T]:
                 except catch as error:
                     errors.append(error)
 
-                if k < segment.count - 1 and (wait := delay * backoff**k) > 0:
+                    if on_failure is not None:
+                        on_failure(error, len(errors))
+
+                if (
+                    k < segment.count - 1
+                    and (wait := _wait(delay, backoff, k, jitter, max_delay)) > 0
+                ):
                     sleep(wait)
 
         msg = f"all {len(errors)} attempts failed"
@@ -101,3 +113,24 @@ class Plan[T]:
 def attempt[T, **P](fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Plan[T]:
     """Bind ``fn`` to its arguments as a one-attempt plan, ready for ``*`` and ``+``."""
     return Plan((Segment(partial(fn, *args, **kwargs), 1),))
+
+
+# --- private helpers
+
+
+def _wait(
+    delay: float,
+    backoff: float,
+    k: int,
+    jitter: Callable[[float], float] | None,
+    max_delay: float | None,
+) -> float:
+    wait = delay * backoff**k
+
+    if jitter is not None:
+        wait = jitter(wait)
+
+    if max_delay is not None:
+        wait = min(wait, max_delay)
+
+    return wait
