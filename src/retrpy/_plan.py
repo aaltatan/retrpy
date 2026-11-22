@@ -1,5 +1,6 @@
 """Plans of attempts: retry is repetition, fallback is concatenation."""
 
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from functools import partial
@@ -30,6 +31,44 @@ class Plan[T]:
     def __iter__(self) -> Iterator[Callable[[], T]]:
         for segment in self.segments:
             yield from [segment.fn] * segment.count
+
+    def __call__(
+        self,
+        *,
+        delay: float = 0.0,
+        backoff: float = 1.0,
+        catch: tuple[type[Exception], ...] = (Exception,),
+        sleep: Callable[[float], object] = time.sleep,
+    ) -> T:
+        """Run the attempts in order and return the first success.
+
+        Exceptions outside ``catch`` propagate at once, unwrapped. Within a segment the wait
+        before the next try is ``delay * backoff**k``, with ``k`` restarting at each segment,
+        so a backup source never inherits the primary's grown delay. Switching segments does
+        not wait. When every attempt fails, an ``ExceptionGroup`` holds all the failures in
+        order, so callers can use ``except*``.
+        """
+
+        if not self.segments:
+            msg = "Cannot run an empty plan"
+            raise ValueError(msg)
+
+        errors: list[Exception] = []
+
+        for segment in self.segments:
+            for k in range(segment.count):
+                try:
+                    return segment.fn()
+
+                except catch as error:
+                    errors.append(error)
+
+                if k < segment.count - 1 and (wait := delay * backoff**k) > 0:
+                    sleep(wait)
+
+        msg = f"all {len(errors)} attempts failed"
+
+        raise ExceptionGroup(msg, errors)
 
     def __mul__(self, n: int) -> Self:
         if not isinstance(n, int):
