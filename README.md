@@ -54,6 +54,10 @@ plan(
   to the next source.
 - The wait is `delay * backoff**k`, then `jitter`, then capped by `max_delay`. A wait of zero
   or less doesn't sleep.
+- Long retry budgets are safe with a cap. If `delay * backoff**k` grows too big for a float
+  (around 1,000 doublings), the wait becomes infinite instead of raising `OverflowError`, and
+  `max_delay` caps it as usual. Without `max_delay`, set a cap or keep the count reasonable:
+  an infinite wait makes `time.sleep` itself raise.
 - Errors outside `catch` propagate immediately and unwrapped. `KeyboardInterrupt` and other
   `BaseException`s are never caught.
 - To retry on a bad *result*, make the attempt raise: for example, turn HTTP 429/5xx into a
