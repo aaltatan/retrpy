@@ -17,6 +17,81 @@ rate = plan(delay=0.05, backoff=2.0, catch=(NetworkError, RetryableHTTPError))
 A plan is a value: build it once, run it as often as you like, pass it around, `len()` it.
 The first attempt that succeeds wins.
 
+## The problem it solves
+
+A nightly job turns the day's orders into invoices, and each order total has to be converted
+from USD to EUR. The exchange-rate provider is usually fine, but now and then it times out,
+answers `503`, or rate-limits you with `429`. When that happens at 2 a.m., the job dies and
+nobody gets invoiced.
+
+You want: retry the main provider a few times with a growing wait, then switch to a second
+provider, and as a last resort use yesterday's rate from your own database. Log every failure.
+Never retry a real bug. And keep it testable without waiting for real.
+
+Written by hand, that usually ends up like this:
+
+```python
+def get_rate() -> float:
+    last_error = None
+    wait = 0.5
+    for url in (PRIMARY, SECONDARY):
+        for _ in range(3):
+            try:
+                return fetch_rate(url, "USD", "EUR")
+            except (TimeoutError, ConnectionError, RetryableHTTPError) as error:
+                log.warning("rate fetch failed: %r", error)
+                last_error = error
+                time.sleep(wait)  # sleeps after the last try too
+                wait *= 2  # the secondary inherits the primary's grown wait
+    try:
+        return load_cached_rate("USD", "EUR")
+    except LookupError:
+        raise last_error  # earlier failures are lost
+```
+
+It works, but it's hard to read and has quiet bugs. The secondary provider starts at a 4-second
+wait instead of 0.5. It sleeps for nothing before switching source. Only the last error
+survives. And `time.sleep` is hard-wired, so the tests really sleep.
+
+With retrpy, the plan says exactly what you meant, and the bugs go away:
+
+```python
+import logging
+
+from retrpy import attempt
+
+log = logging.getLogger("invoicing")
+
+rate_plan = (
+    attempt(fetch_rate, PRIMARY, "USD", "EUR") * 3  # main provider, 3 tries
+    + attempt(fetch_rate, SECONDARY, "USD", "EUR") * 3  # backup provider, fresh backoff
+    + attempt(load_cached_rate, "USD", "EUR")  # yesterday's rate from the database
+)
+
+
+def get_rate(sleep=time.sleep) -> float:
+    return rate_plan(
+        delay=0.5,
+        backoff=2.0,
+        max_delay=10.0,
+        catch=(TimeoutError, ConnectionError, RetryableHTTPError, LookupError),
+        on_failure=lambda error, n: log.warning("rate attempt %d failed: %r", n, error),
+        sleep=sleep,
+    )
+```
+
+What you get:
+
+- **Each provider gets its own backoff**: 0.5 s and 1 s between the primary's tries, then the
+  same again for the secondary. There's no wait when switching source.
+- **Bugs fail fast.** A `KeyError` from a changed JSON shape isn't in `catch`, so it surfaces on
+  the first try, unwrapped, with its real traceback.
+- **Nothing is lost.** If even the cache is empty, the job raises one `ExceptionGroup` with all
+  seven failures, so the morning report shows exactly what went wrong and in what order.
+- **Tests are instant.** Pass `sleep=waits.append` and assert on the waits.
+- **The policy is a value.** `rate_plan` can be imported, reused by another job, or extended
+  with `+`.
+
 ## Install
 
 ```bash
