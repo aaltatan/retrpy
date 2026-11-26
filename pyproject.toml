@@ -41,6 +41,9 @@ dev = [
     "pytest",
     "ruff",
 ]
+docs = [
+    "mkdocs-material>=9.7",
+]
 
 [tool.ruff]
 line-length = 100
