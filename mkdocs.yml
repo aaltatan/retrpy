@@ -1,0 +1,87 @@
+site_name: retrpy
+site_description: Retry and fallback as plans of attempts, composed with * and +.
+site_url: https://aaltatan.github.io/retrpy/
+repo_url: https://github.com/aaltatan/retrpy
+repo_name: aaltatan/retrpy
+edit_uri: edit/main/docs/
+copyright: MIT
+
+exclude_docs: |
+  reports/
+  superpowers/
+
+theme:
+  name: material
+  icon:
+    logo: material/refresh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Installation: install.md
+  - User guide:
+      - guide/index.md
+      - Building plans: guide/plans.md
+      - Running a plan: guide/running.md
+      - Waits, backoff and jitter: guide/waits.md
+      - When everything fails: guide/failures.md
+      - Testing: guide/testing.md
+  - Recipes: recipes.md
+  - Reference:
+      - reference/index.md
+      - API: reference/api.md
+      - Exceptions: reference/exceptions.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aaltatan/retrpy
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/retrpy/
