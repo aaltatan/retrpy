@@ -1,5 +1,7 @@
 # retrpy
 
+**Documentation: <https://aaltatan.github.io/retrpy/>**
+
 Retry and fallback as **plans of attempts**, composed with ordinary Python operators.
 Zero dependencies, fully typed.
 
